@@ -3,8 +3,8 @@
         "n_trials": 50,
         "n_splits": 3,
         "train_size": None,
-        "eval_params": {"metrics": ["accuracy", "auROC"]},
-        "optimization_direction": ["maximize", "maximize"]
+        "eval_params": {"metrics": ["accuracy"]},
+        "optimization_direction": ["maximize"]
     },
 
     "model_hyperparams": {
@@ -57,7 +57,7 @@
             "random_state": {"spec_type": "constant",
                              "value" : 7
             }
-        }
+        },
 
         "Ridge": {
             "alpha": {"spec_type": "double",
@@ -90,7 +90,7 @@
             "n_nonzero_coefs": {"spec_type": "integer",
                       "min": 1, "max": 100
             }
-        }
+        },
 
         # Classification Models
         "SVC": {
@@ -125,6 +125,7 @@
                              "value" : "adaptive"
             }
         }, 
+
         "LogisticRegression": {
             "C": {"spec_type": "double",
                       "min": 1, "max": 1000, "log": True
@@ -145,11 +146,13 @@
                              "value" : 7
             }
         }, 
+        
         "GaussianNB": {
             "var_smoothing": {"spec_type": "double",
                       "min": 1e-10, "max": 1e-6, "log": True
             }
         }, 
+
         "GradientBoostingClassifier": {
             "max_depth": {"spec_type": "integer",
                     "min": 25, "max": 200
@@ -186,6 +189,7 @@
                       "value" : 7
             }
         },
+        
         "RandomForestClassifier": {
             "max_depth": {"spec_type": "integer",
                       "min": 25, "max": 200

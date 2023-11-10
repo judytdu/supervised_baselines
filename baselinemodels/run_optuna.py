@@ -5,34 +5,36 @@ Implements optuna optimization algorithms for hyperparameter tuning.
 Returns an optuna study class.
 
   Typical usage examples:
-    from run_optuna import *
-    import default_optuna
+    import json
+    import run_optuna
     from sklearn import datasets
+
     
     X, y = datasets.load_iris(return_X_y=True)
     X = X[y != 0, :2]
     y = y[y != 0].astype(float)
     
-    svc_hyperparam_config = default_optuna.get_param_spec('SVC')
-    
-    optimization = optimize_hyperparams(
+    optuna_config = json.load(optuna_config_file)
+    svc_hyperparam_config = optuna_config["model_hyperparams"]["SVC"]
+    tuning_params = optuna_config["global_tuning_params"]
+            
+    optimization = run_optuna.optimize_hyperparams(
         X, y,
-        optimization_direction=['maximize', 'maximize'],
-        n_trials=10,
-        n_splits=2,
-        train_size=0.8,
+        optimization_direction=tuning_params["optimization_direction"],
+        n_trials=tuning_params["n_trials"],
+        n_splits=tuning_params["n_splits"],
+        train_size=tuning_params["train_size"],
         hyperparam_config=svc_hyperparam_config,
         define_model_params={'model_name': 'SVC'}, 
-        training_params={}, 
-        eval_params={'metrics': ['accuracy', 'auROC']}
+        training_params={}
     )
 """
 import optuna
 import numpy as np
 import pandas as pd
 
+import define_models
 from sklearn.model_selection import train_test_split, KFold
-import otb_utils.default_optuna as default_optuna
 
 def sample_hyperparams_with_optuna(trial, hyperparam_config: dict):
     '''
@@ -53,7 +55,8 @@ def sample_hyperparams_with_optuna(trial, hyperparam_config: dict):
                 - int: spec_type, min, max, step, log
                 - uniform: min, max
                 - discrete_uniform: min, max, step
-                      Values are sampled from [min, min+step, min+2*step, ... , min+k*step <= max]
+                    Values are sampled from 
+                    [min, min+step, min+2*step, ... , min+k*step <= max]
                 - constant: spec_type, value (unchanging, not sampled)
             Example:
                 hyperparam_config = {
@@ -67,11 +70,11 @@ def sample_hyperparams_with_optuna(trial, hyperparam_config: dict):
     '''    
     params = {}     
     # Individually sample each hyperparameter in hyperparam_config
-    for key, config in hyperparam_config:
+    for key, config in hyperparam_config.items():
         spec_type = config['spec_type']
         
         # Extract type-specific parameters
-        if 'step' in config.keys():
+        if 'step' in config:
             step = config['step']
         else:
             if spec_type == 'integer':
@@ -104,11 +107,11 @@ def objective(data: dict,
               trial = None, 
               params: dict = {}, 
               hyperparam_config: dict = {}, 
-              define_model_fxn = default_optuna.define_models,
+              define_model_fxn = define_models.define_models,
               define_model_params: dict = {}, 
-              train_model_fxn = default_optuna.train_models, 
+              train_model_fxn = lambda model, X, y: model.fit(X,y), 
               training_params: dict = {}, 
-              evaluate_model_fxn = default_optuna.eval_models,
+              evaluate_model_fxn = lambda model, X, y: model.score(X,y),
               eval_params: dict = {}):
     '''
     Defines objective function for optuna hyperparameter optimization.
