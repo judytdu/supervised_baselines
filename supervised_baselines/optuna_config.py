@@ -1,9 +1,9 @@
-{
+config_dict = {
     "global_tuning_params": {
         "n_trials": 50,
-        "n_splits": 3,
-        "train_size": None,
-        "eval_params": {"metrics": ["accuracy"]},
+        "n_splits": 2,
+        "train_size": 0.7,
+        "eval_params": {},
         "optimization_direction": ["maximize"]
     },
 
