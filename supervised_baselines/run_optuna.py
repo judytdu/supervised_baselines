@@ -5,34 +5,38 @@ Implements optuna optimization algorithms for hyperparameter tuning.
 Returns an optuna study class.
 
   Typical usage examples:
-    from run_optuna import *
-    import default_optuna
+    import json
+    import run_optuna
     from sklearn import datasets
-    
+
+    # Load training data
     X, y = datasets.load_iris(return_X_y=True)
     X = X[y != 0, :2]
     y = y[y != 0].astype(float)
     
-    svc_hyperparam_config = default_optuna.get_param_spec('SVC')
-    
-    optimization = optimize_hyperparams(
+    # Load hyperparameter tuning configurations
+    optuna_config = json.load(optuna_config_file)
+    svc_hyperparam_config = optuna_config["model_hyperparams"]["SVC"]
+    tuning_params = optuna_config["global_tuning_params"]
+            
+    # Perform hyperparameter tuning and model training with optimal parameters        
+    optimization = run_optuna.optimize_hyperparams(
         X, y,
-        optimization_direction=['maximize', 'maximize'],
-        n_trials=10,
-        n_splits=2,
-        train_size=0.8,
+        optimization_direction=tuning_params["optimization_direction"],
+        n_trials=tuning_params["n_trials"],
+        n_splits=tuning_params["n_splits"],
+        train_size=tuning_params["train_size"],
         hyperparam_config=svc_hyperparam_config,
         define_model_params={'model_name': 'SVC'}, 
-        training_params={}, 
-        eval_params={'metrics': ['accuracy', 'auROC']}
+        training_params={}
     )
 """
 import optuna
 import numpy as np
 import pandas as pd
 
+import define_models
 from sklearn.model_selection import train_test_split, KFold
-import otb_utils.default_optuna as default_optuna
 
 def sample_hyperparams_with_optuna(trial, hyperparam_config: dict):
     '''
@@ -53,7 +57,8 @@ def sample_hyperparams_with_optuna(trial, hyperparam_config: dict):
                 - int: spec_type, min, max, step, log
                 - uniform: min, max
                 - discrete_uniform: min, max, step
-                      Values are sampled from [min, min+step, min+2*step, ... , min+k*step <= max]
+                    Values are sampled from 
+                    [min, min+step, min+2*step, ... , min+k*step <= max]
                 - constant: spec_type, value (unchanging, not sampled)
             Example:
                 hyperparam_config = {
@@ -67,11 +72,11 @@ def sample_hyperparams_with_optuna(trial, hyperparam_config: dict):
     '''    
     params = {}     
     # Individually sample each hyperparameter in hyperparam_config
-    for key, config in hyperparam_config:
+    for key, config in hyperparam_config.items():
         spec_type = config['spec_type']
         
         # Extract type-specific parameters
-        if 'step' in config.keys():
+        if 'step' in config:
             step = config['step']
         else:
             if spec_type == 'integer':
@@ -87,13 +92,17 @@ def sample_hyperparams_with_optuna(trial, hyperparam_config: dict):
         if spec_type == 'categorical':
             params[key] = trial.suggest_categorical(key, config['values'])
         elif spec_type == 'double':
-            params[key] = trial.suggest_float(key, config['min'], config['max'], step=step, log=log)
+            params[key] = trial.suggest_float(
+                key, config['min'], config['max'], step=step, log=log)
         elif spec_type == 'integer':
-            params[key] = trial.suggest_int(key, config['min'], config['max'], step=step, log=log)
+            params[key] = trial.suggest_int(
+                key, config['min'], config['max'], step=step, log=log)
         elif spec_type == 'uniform':
-            params[key] = trial.suggest_uniform(key, config['min'], config['max'])
+            params[key] = trial.suggest_uniform(
+                key, config['min'], config['max'])
         elif spec_type == 'discrete_uniform':
-            params[key] = trial.suggest_discrete_uniform(key, config['min'], config['max'], config['step'])
+            params[key] = trial.suggest_discrete_uniform(
+                key, config['min'], config['max'], config['step'])
         elif spec_type == 'constant':
             params[key] = config['value']
         else:
@@ -104,35 +113,35 @@ def objective(data: dict,
               trial = None, 
               params: dict = {}, 
               hyperparam_config: dict = {}, 
-              define_model_fxn = default_optuna.define_models,
+              define_model_fxn = define_models.define_models,
               define_model_params: dict = {}, 
-              train_model_fxn = default_optuna.train_models, 
+              train_model_fxn = lambda model, X, y: model.fit(X,y), 
               training_params: dict = {}, 
-              evaluate_model_fxn = default_optuna.eval_models,
+              evaluate_model_fxn = lambda model, X, y: model.score(X,y),
               eval_params: dict = {}):
     '''
     Defines objective function for optuna hyperparameter optimization.
 
     Arguments:
-        data: dictionary of data. Must have keys n-splits and one of the following sets:
-            - (n_splits = 2): X_train, y_train, X_test, y_test
-            - (n_splits > 2): X, y, splitter.
+        data: data dict. Must contain the keys n-splits and the following:
+            - (if n_splits = 2): X_train, y_train, X_test, y_test
+            - (if n_splits > 2): X, y, splitter.
                 
         trial: optuna.trial.Trial object
         params: (Optional) If not empty, a new hyperparameter set is sampled.
         hyperparam_config: dictionary, whose keys = hyperparameter names, 
             value = config dict with keys according to hparam type ('spec_type')
             
-        define_model_fxn: function that returns a model. Takes in (sampled) parameters
+        define_model_fxn: function that returns a model. Takes in sampled params
             and additional parameters given by define_model_params
         define_model_params: Dictionary of additional parameters
         
-        train_model_fxn: function that returns a model. Takes in model class, training data,
-            and additional parameters given by training_params
+        train_model_fxn: function that returns a model. Takes in model class, 
+            training data, and additional parameters given by training_params
         training_params: Dictionary of additional parameters
         
         evaluate_model_fxn: function that returns performance metric(s). Takes in 
-            model class, testing data, and additional parameters given by eval_params
+            model class, testing data, and extra parameters given by eval_params
         eval_params: Dictionary of additional parameters
         
     Returns:
@@ -142,7 +151,7 @@ def objective(data: dict,
     if len(params) == 0:
         if trial is None:
             raise Exception(f'If sampling hyperparameters, trial can not be None')
-        if len(hyperparam_config) > 0:
+        if hyperparam_config:
             params = sample_hyperparams_with_optuna(trial, hyperparam_config)
         else:
             raise Exception(f'Hyperparameter config dict empty.')
@@ -170,7 +179,6 @@ def objective(data: dict,
         return metric
     else:
         metrics = []
-        data['splitter']
         for i, train_index, test_index in data['splitter']:
             # Define model
             define_model_params['params'] = params
@@ -203,34 +211,36 @@ def fill_objective(data, params, hyperparam_config, define_model_fxn, define_mod
 
 def optimize_hyperparams(X, y,
                          optimization_direction = 'maximize',
-                         n_trials = 150,
+                         n_trials: int = 150,
                          n_splits: int = 5,
-                         split_groups = None,
-                         train_size = None,
+                         split_groups: np.array = None,
+                         train_size: float = None,
                          params: dict = {}, 
                          hyperparam_config: dict = {}, 
-                         define_model_fxn = default_optuna.define_models,
+                         define_model_fxn = define_models.define_models,
                          define_model_params: dict = {}, 
-                         train_model_fxn = default_optuna.train_models, 
+                         train_model_fxn = lambda X, y, model: model.fit(),
                          training_params: dict = {}, 
-                         evaluate_model_fxn = default_optuna.eval_models,
+                         evaluate_model_fxn = lambda X, y, model: model.score(),
                          eval_params: dict = {},
                          neptune_callback = None):
     """
     Initializes optuna study and performs hyperparameter tuning.
     
-    Samples hyperparameter pertaining to model using Tree-structured Parzen Estimator.
-    Trains model given sampled hyperparameters and calculates optimization metrics on held-out data.
+    Steps:
+        1. Samples hyperparameters using Tree-structured Parzen Estimator.
+        2. Trains model given sampled hyperparameters.
+        3. Calculates optimization metrics on held-out data.
     
     Arguments:
-        X, y: Features and labels, respectively. The rows of X must correspond to the same
-            samples as y. 
+        X, y: Features and labels, respectively. The rows of X must correspond to
+            the same samples as y. 
 
-        optimization_direction: string or length 2+ list. Defines if performance metrics returned
-            by evaluate_model_fxn should be minimized or maximized.
+        optimization_direction: string or length 2+ list. Defines if performance 
+            metrics from evaluate_model_fxn should be minimized or maximized.
         n_trials: number of sampled sets of hyperparameters
-        n_splits: Number of folds splititng the input data. Must be an integer >= 2. 
-        split_groups: array-like. Group labels for samples used for splitting into folds.
+        n_splits: Number of folds splititng the input data. Must be an int >= 2. 
+        split_groups: array-like. Group labels for samples for fold splitting.
         train_size: If n_splits=2, data is split into training and testing sets. 
             train_size is the fraction of data allocated to the training dataset.
             
@@ -238,23 +248,24 @@ def optimize_hyperparams(X, y,
         hyperparam_config: dictionary, whose keys = hyperparameter names, 
             value = config dict with keys according to hparam type ('spec_type')
             
-        define_model_fxn: function that returns a model. Takes in (sampled) parameters
+        define_model_fxn: function that returns a model. Takes in sampled params
             and additional parameters given by define_model_params
         define_model_params: Dictionary of additional parameters
         
-        train_model_fxn: function that returns a model. Takes in model class, training data,
-            and additional parameters given by training_params
+        train_model_fxn: function that returns a model. Takes in model class, 
+            training data, and additional parameters given by training_params
         training_params: Dictionary of additional parameters
         
         evaluate_model_fxn: function that returns performance metric(s). Takes in 
-            model class, testing data, and additional parameters given by eval_params
+            model class, testing data, and extra parameters given by eval_params
         eval_params: Dictionary of additional parameters
         
-        neptune_callback: NeptuneCallback class to document optuna trials on NeptuneAI.
-            None if NeptuneAI loggig is not desired. 
+        neptune_callback: NeptuneCallback class for documenting optuna trials on 
+            NeptuneAI. None if NeptuneAI loggig is not desired. 
         
     Returns:
         study: Optuna object
+        model: Model trained on optimal hyperparameters in study
     """
     # Split data into training/testing sets or folds
     data = {'n_splits': n_splits}
@@ -283,8 +294,10 @@ def optimize_hyperparams(X, y,
 
     # Initialize study
     study = optuna.create_study(directions=optimization_direction)
-    # Perform Optimization
 
+    # Perform Optimization
     study.optimize(specified_objective, n_trials = n_trials, callbacks = neptune_callback)
-    
-    return study
+    model = define_model_fxn(**define_model_params)
+    model = train_model_fxn(X, y, model, **training_params)
+        
+    return study, model

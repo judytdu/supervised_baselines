@@ -12,10 +12,10 @@ Instantiates sklearn class specified by model_type.
 Typical Usage Examples:
     python 
 """     
-def define_models(params: dict, model_name: str):
+def define_models(model_name: str, params: dict={}):
     """
     Default function for defining machine learning models.
-    Initializes model specified by model_name.
+    Instantiates model specified by model_name.
     
     Arguments:
         model_name: String defining model to initialize
