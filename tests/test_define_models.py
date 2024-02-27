@@ -25,4 +25,12 @@ def test_validate_model_name_invalid():
 
 def test_validate_model_names_valid():
     assert define_models.validate_model_name("SVC")
-    
+
+# Test that all models can be loaded
+def test_define_all_models():
+    all_valid_types  = \
+        define_models.get_model_names(all_regressors=True) + \
+        define_models.get_model_names(all_regressors=False)
+    for name in all_valid_types:
+        define_models.define_models(model_name=name)
+    assert True
