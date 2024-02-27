@@ -1,8 +1,9 @@
 import os, logging
 from sklearn import datasets
 
-import supervised_baselines.define_models as define_models
-import supervised_baselines.optuna_config as optuna_config
+import define_models as define_models
+import optuna_config as optuna_config
+import run_optuna as run_optuna
 
 from neptune import management
 import neptune.new as neptune
@@ -53,7 +54,7 @@ class SupervisedBaselines():
             ):
         self.X = []
         self.y = []
-        self.split_groups = []
+        self.split_groups = None
         self._neptune_api_token = neptune_api_token
         
         self._configure_logger(log_file)
@@ -159,7 +160,64 @@ class SupervisedBaselines():
             self.neptune_logger[k] = v
         for k, v in self.model_hyperparams[model_name].items():
             self.neptune_logger[k] = v
+    
+    def add_neptune_global_metadata(key, value):
+        self.global_tuning_params[key] = value
+    
+    def crossvalidation_split(self):
+        """Establish training/validation split that is consistent across models.
+        The number of splits is determined by the global config file.
+
+        Returns:
+            - data: data dict. Must contain the keys n-splits and the following:
+                - (if n_splits = 2): X_train, y_train, X_test, y_test
+                - (if n_splits > 2): X, y, splitter.
+        """
+        n_splits = self.global_tuning_params["n_splits"]
+        train_size = self.global_tuning_params["train_size"]
         
+        self.data = run_optuna.crossvalidation_split(
+            n_splits, train_size, self.X, self.y, self.split_groups
+        )
+
+    def fit(self):
+        """Perform hyperparameter tuning and final model training
+        on all models in self.model_types.
+        """
+        # Split data into training/validation sets or folds
+        self.crossvalidation_split()
+        # Perform hyperparameter tuning and fnal training on each model type
+        for mt in self.model_types:
+            if self.__neptune_api_token is not None:
+                self.neptune_initialize_run(model_name=mt)
+                self.neptune_log_metadata(model_name=mt)
+            
+            if self.global_tuning_params is not None:
+                # Perform optuna hyperparameter tuning
+                self.optuna[mt], self.model[mt] = run_optuna.optimize_hyperparams(
+                    # Input Data
+                    data = self.data,
+                    # KFold Grouping
+                    split_groups = split_groups,
+                    # Sampling, Train/Eval Specifications
+                    hyperparam_config = self.model_hyperparams[mt],
+                    define_model_fxn = define_models.define_models,
+                    define_model_params = {"model_name": mt},
+                    train_model_fxn = lambda model, X, y: model.fit(X,y), 
+                    evaluate_model_fxn = lambda model, X, y: model.score(X,y),
+                    # Neptune Logger
+                    neptune_callback = [self.neptune_callback],
+                    # Trial and Fold Specifications: 
+                        # n_trials, n_splits, train_size, 
+                        # eval_params, optimization_direction
+                    **self.global_tuning_params
+                )
+                self.optuna_best_performance[mt] = self.optuna[mt].best_value
+            if self.__neptune_api_token is not None:
+                self.neptune_logger.stop()
+                self.neptune_callback = None
+        self.neptune_del_token()
+    
 if __name__ == '__main__':
     # Run typical usage example
     class IrisClassifier(SupervisedBaselines):
@@ -170,14 +228,11 @@ if __name__ == '__main__':
             X, y = datasets.load_iris(return_X_y=True)
             self.X = X[y != 0]
             self.y = y[y != 0].astype(float)
-        
-        def fit(self):
-            super().fit(self.X, self.y)
     
     iris_model = IrisClassifier(
-        model_type="all_classifiers",
-        neptune_project_name ="supervised-baselines-example", 
+        model_type="SVC",
+        neptune_project_name ="ai4all-genomics-demo", 
         neptune_workspace="drjudydu")
     iris_model.load_data()
+    iris_model.crossvalidation_split()
     iris_model.fit()
-    print(self.optuna_best_performance)

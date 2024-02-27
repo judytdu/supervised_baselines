@@ -1,18 +1,17 @@
-import os
 from supervised_baselines import baselines
 
-# Initialize regressor and classifier classes
+import os
+
+# Initialize regressor, classifier, and svc classes
 os.system("source ~/neptune_api_token.sh")
 neptune_api_token = os.environ["NEPTUNE_API_TOKEN"]
 
-params = {"model_type": "all_regressors",
+params = {
     "neptune_project_name": "ai4all-genomics-demo", 
-    "neptune_workspace": "drjudydu",
-    "neptune_api_token": neptune_api_token
+    "neptune_workspace": "drjudydu"
 }
-reg = baselines.SupervisedBaselines(**params)
-params["model_type"] = "all_classifiers"
-clf = baselines.SupervisedBaselines(**params)
+reg = baselines.SupervisedBaselines(model_type="all_regressors", params)
+clf = baselines.SupervisedBaselines(model_type="all_classifiers", params)
 
 # Test __init__() and related helper functions
 def test_repr(regressors=reg, classifiers=clf):
@@ -51,8 +50,28 @@ def test_neptune_initialize_run(classifiers=clf):
     assert True
 
 # Test Fit
+class IrisClassifier(SupervisedBaselines):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+                    
+    def load_data(self):
+        X, y = datasets.load_iris(return_X_y=True)
+        self.X = X[y != 0]
+        self.y = y[y != 0].astype(float)
+        
+svc = IrisClassifier(model_type="SVC", **params)
+svc.add_neptune_global_metadata("data type", "test_baselines")
+svc.load_data()
+
+def test_crossvalidation_split(svc):
+    svc.crossvalidation_split(n_splits=2)
+    assert len(data) = 7
+    
+def test_optuna_fit(svc):
+    svc.fit()
+    assert svc.self.optuna_best_performance > 0
 
 # Test Eval
 
 # Break down test objects
-del neptune_api_token, params, reg, clf
+del IrisClassifier, neptune_api_token, params, reg, clf, svc 

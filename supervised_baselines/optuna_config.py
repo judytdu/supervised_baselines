@@ -6,6 +6,11 @@ config_dict = {
         "eval_params": {},
         "optimization_direction": ["maximize"]
     },
+    # n_splits: Number of folds splititng the input data. Must be an int >= 2. 
+    # split_groups: array-like. Group labels for samples for fold splitting.
+    # train_size: If n_splits=2, data is split into training and testing sets. 
+        # train_size is the fraction of data allocated to the training dataset.
+            
 
     "model_hyperparams": {
         # Regression Models
