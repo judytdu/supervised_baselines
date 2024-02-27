@@ -48,9 +48,9 @@ class SupervisedBaselines():
     """
     def __init__(self, model_type: str, 
                  neptune_project_name: str, neptune_workspace: str, 
-                 neptune_api_token: str=None,
-                 log_file: str="supervised_baseline.log",
-                 optuna_config_dict: dict=optuna_config.config_dict):
+                 neptune_api_token: str = None,
+                 log_file: str = "supervised_baseline.log",
+                 optuna_config_dict: dict = optuna_config.config_dict):
         self.X = []
         self.y = []
         self.split_groups = None
@@ -251,8 +251,7 @@ if __name__ == '__main__':
         model_type="SVC",
         neptune_project_name="ai4all-genomics-demo", 
         neptune_workspace="drjudydu")
-    iris_model.load_data()
-    iris_model.crossvalidation_split()
     iris_model.neptune_add_global_metadata("n_trials", 5)
+    iris_model.load_data()
     iris_model.fit()
     print(iris_model.best_metric)

@@ -254,7 +254,7 @@ def fill_objective(data, params, hyperparam_config,
     return filled_obj
 
 def optimize_hyperparams(data,
-                         optimization_direction = "maximize",
+                         optimization_direction: str = "maximize",
                          n_trials: int = 150,
                          params: dict = {}, 
                          hyperparam_config: dict = {}, 

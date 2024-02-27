@@ -1,6 +1,8 @@
 from supervised_baselines import baselines
+from supervised_baselines import run_optuna
 
 import os
+import sklearn.datasets
 
 # Initialize regressor, classifier, and svc classes
 os.system("source ~/neptune_api_token.sh")
@@ -10,8 +12,8 @@ params = {
     "neptune_project_name": "ai4all-genomics-demo", 
     "neptune_workspace": "drjudydu"
 }
-reg = baselines.SupervisedBaselines(model_type="all_regressors", params)
-clf = baselines.SupervisedBaselines(model_type="all_classifiers", params)
+reg = baselines.SupervisedBaselines(model_type="all_regressors", **params)
+clf = baselines.SupervisedBaselines(model_type="all_classifiers", **params)
 
 # Test __init__() and related helper functions
 def test_repr(regressors=reg, classifiers=clf):
@@ -50,28 +52,41 @@ def test_neptune_initialize_run(classifiers=clf):
     assert True
 
 # Test Fit
-class IrisClassifier(SupervisedBaselines):
+class IrisClassifier(baselines.SupervisedBaselines):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
                     
     def load_data(self):
-        X, y = datasets.load_iris(return_X_y=True)
-        self.X = X[y != 0]
-        self.y = y[y != 0].astype(float)
+        # Load Iris dataset
+        X, y = sklearn.datasets.load_iris(return_X_y=True)
+        X = X[ y!=0 ]
+        y = y[ y!= 0 ].astype(float)
+        
+        # Define training/testing split
+        data_split = run_optuna.crossvalidation_split(
+            n_splits=2, train_size=0.8, X=X, y=y)
+        
+        self.X, self.y = data_split["X_train"], data_split["y_train"]
+        self.X_test, self.y_test = data_split["X_test"], data_split["y_test"]
+        self.split_groups = None
         
 svc = IrisClassifier(model_type="SVC", **params)
-svc.add_neptune_global_metadata("data type", "test_baselines")
+svc.neptune_add_global_metadata("data type", "test_baselines")
+svc.neptune_add_global_metadata("n_trials", 5)
 svc.load_data()
 
-def test_crossvalidation_split(svc):
-    svc.crossvalidation_split(n_splits=2)
-    assert len(data) = 7
+def test_crossvalidation_split(svc=svc):
+    svc.crossvalidation_split()
+    assert "n_splits" in svc.data
     
-def test_optuna_fit(svc):
+def test_optuna_fit(svc=svc):
     svc.fit()
-    assert svc.self.optuna_best_performance > 0
-
-# Test Eval
+    assert len(svc.best_metric) > 0
 
 # Break down test objects
-del IrisClassifier, neptune_api_token, params, reg, clf, svc 
+del neptune_api_token, params, reg, clf, svc, IrisClassifier
+os.system("rm supervised_baseline.log")
+
+# Test KFold
+
+# Test validation_split arg
