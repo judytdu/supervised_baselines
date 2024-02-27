@@ -1,8 +1,8 @@
 import os, logging
 from sklearn import datasets
 
-import define_models
-import optuna_config
+import supervised_baselines.define_models as define_models
+import supervised_baselines.optuna_config as optuna_config
 
 """Main script. Creates class capable of training, monitoring, and logging
 results from supervised learning. By default, performs hyperparameter tuning
@@ -103,7 +103,8 @@ if __name__ == '__main__':
             super().fit(self.X, self.y)
     
     iris_model = IrisClassifier(
-        model_type="all_classifiers")
+        model_type="all_classifiers"
+    )
     iris_model.load_data()
     iris_model.fit()
     print(self.optuna_best_performance)
