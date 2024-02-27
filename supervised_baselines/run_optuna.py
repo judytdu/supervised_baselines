@@ -33,7 +33,7 @@ import optuna
 import numpy as np
 import pandas as pd
 
-import define_models
+from supervised_baselines import define_models
 from sklearn.model_selection import train_test_split, KFold
 
 def crossvalidation_split(n_splits: int, train_size: float, 
@@ -60,22 +60,21 @@ def crossvalidation_split(n_splits: int, train_size: float,
         data["X_train"], data["X_test"], data["y_train"], data["y_test"] = \
             train_test_split(
                 X, y, stratify=split_groups,
-                train_size=train_size, random_state=7
-            )
+                train_size=train_size, random_state=7)
     elif n_splits > 2:
         # Split data into folds if train_size is not set
         if train_size is None:
             data["splitter"] = []
             splitter = KFold(
-                n_splits=n_splits, shuffle=True, random_state=7
-            ).split(X,y)
+                n_splits=n_splits, shuffle=True, random_state=7).split(X,y)
             for i, (train_index, test_index) in enumerate(splitter):
                 data["splitter"].append([i, train_index, test_index])
             
         else:
-            raise Exception(f"Train_size can not be used if n_splits!=2. train_size={train_size}") 
+            msg = f"Train_size: {train_size}. Must be None if n_splits!=2."
+            raise Exception(msg) 
     else:
-        raise Exception(f"n_splits can not be lesser than 2. n_splits={n_splits}")
+        raise Exception(f"n_splits: {n_splits}. Must be greater than 1.")
     return data
         
 def sample_hyperparams_with_optuna(trial, hyperparam_config: dict):
@@ -236,8 +235,10 @@ def objective(data: dict,
             metrics.append(metric)
         return  tuple(np.mean(metrics, axis=0))
 
-def fill_objective(data, params, hyperparam_config, define_model_fxn, define_model_params, 
-                   train_model_fxn, training_params,evaluate_model_fxn, eval_params):
+def fill_objective(data, params, hyperparam_config, 
+                   define_model_fxn, define_model_params, 
+                   train_model_fxn, training_params,
+                   evaluate_model_fxn, eval_params):
     """
     Helper function for optimize_hyperparams(). Wrapper for function objective(). 
 
@@ -245,8 +246,11 @@ def fill_objective(data, params, hyperparam_config, define_model_fxn, define_mod
         filled_obj: function
     """
     def filled_obj(trial):
-        return objective(data, trial, params, hyperparam_config, define_model_fxn, define_model_params, 
-                         train_model_fxn, training_params,evaluate_model_fxn, eval_params)
+        return objective(
+            data, trial, params, hyperparam_config, 
+            define_model_fxn, define_model_params, 
+            train_model_fxn, training_params,
+            evaluate_model_fxn, eval_params)
     return filled_obj
 
 def optimize_hyperparams(data,
@@ -256,7 +260,7 @@ def optimize_hyperparams(data,
                          hyperparam_config: dict = {}, 
                          define_model_fxn = define_models.define_models,
                          define_model_params: dict = {}, 
-                         train_model_fxn = lambda X, y, model: model.fit(X,y),
+                         train_model_fxn = lambda model, X, y: model.fit(X,y),
                          training_params: dict = {}, 
                          evaluate_model_fxn = lambda X, y, model: model.score(X,y),
                          eval_params: dict = {},
@@ -302,20 +306,23 @@ def optimize_hyperparams(data,
         model: Model trained on optimal hyperparameters in study
     """
     # Define objective function
-    specified_objective = fill_objective(data, params, hyperparam_config, 
+    specified_objective = fill_objective(
+        data, params, hyperparam_config, 
         define_model_fxn, define_model_params, 
         train_model_fxn, training_params,
-        evaluate_model_fxn, eval_params
-    )
+        evaluate_model_fxn, eval_params)
 
     # Initialize study
     study = optuna.create_study(directions=optimization_direction)
 
     # Perform Optimization
     study.optimize(specified_objective, n_trials=n_trials, callbacks=neptune_callback)
-    for k,v in study.best_params.items():
-        training_params[k] = v
-    model = define_model_fxn(**define_model_params)
-    model = train_model_fxn(data["X"], data["y"], model, **training_params)
+    
+    # Train Full Model
+    define_model_params["params"] = study.best_params
+    full = train_model_fxn(
+        model = define_model_fxn(**define_model_params), 
+        X = data["X"], 
+        y = data["y"])
         
-    return study, model
+    return study, full

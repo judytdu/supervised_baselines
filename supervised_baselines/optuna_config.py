@@ -3,6 +3,7 @@ config_dict = {
         "n_trials": 50,
         "n_splits": 2,
         "train_size": 0.8,
+        "split_groups": None,
         "eval_params": {},
         "optimization_direction": ["maximize"]
     },
