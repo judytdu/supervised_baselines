@@ -19,7 +19,6 @@ tensorflow-io-gcs-filesystem = "^0.34.0"
 [tool.poetry.group.dev.dependencies]
 black = "^23.11.0"
 lint = "^1.2.1"
-pytest = "^7.4.3"
 
 [build-system]
 requires = ["poetry-core"]
