@@ -20,7 +20,8 @@ Typical Usage Examples:
         optuna_config_dict=optuna_config.config_dict,
         neptune_project_name="project_name", 
         neptune_workspace="neptuneai_username", 
-        neptune_api_token="api_token")
+        neptune_api_token="api_token"
+    )
     example_model.fit(X, y) 
 """
 
@@ -53,12 +54,14 @@ class SupervisedBaselines():
         self.X = []
         self.y = []
         self.split_groups = []
+        self._neptune_api_token = neptune_api_token
         
         self._configure_logger(log_file)
         self._configure_model_and_hyperparams(model_type)
         self._configure_optuna_hyperparams(optuna_config_dict)
         self._configure_neptuneai(
-            neptune_project_name, neptune_workspace, neptune_api_token)
+            neptune_project_name, neptune_workspace, neptune_api_token
+        )
     
     def load_data(self):
         """Defines self.X, self.y, and self.split_groups
@@ -105,7 +108,6 @@ class SupervisedBaselines():
         else:
             self.global_tuning_params, self.model_hyperparams = None, None        
         
-        
     def _configure_neptuneai(self, neptune_project_name, neptune_workspace, 
                                   neptune_api_token):
         logging.info(
@@ -116,29 +118,28 @@ class SupervisedBaselines():
         self.neptune_logger, self.neptune_callback = None, None        
         if neptune_api_token is None:
             if "NEPTUNE_API_TOKEN" in os.environ:
-                neptune_api_token = os.environ["NEPTUNE_API_TOKEN"]
+                self._neptune_api_token = os.environ["NEPTUNE_API_TOKEN"]
             else:
                 logging.info("""neptune_api_token not found. 
                              For more info, see neptune.ai/get_my_api_token.""")
-        self.__neptune_api_token = neptune_api_token
         
         # Create project if it does not yet exist
-        if self.__neptune_api_token is not None:
+        if self._neptune_api_token is not None:
             neptune_projects = management.get_project_list(
-                api_token=self.__neptune_api_token
+                api_token=self._neptune_api_token
             )
             if self.neptune_project not in neptune_projects:
                 management.create_project(
                     workspace=neptune_workspace,
                     name=neptune_project_name,
                     visibility='workspace',
-                    api_token=self.__neptune_api_token
+                    api_token=self._neptune_api_token
                 )            
     
     def neptune_initialize_run(self, model_name: str):
         self.neptune_logger = neptune.init_run(
             project=self.neptune_project,
-            api_token=self.__neptune_api_token,
+            api_token=self._neptune_api_token,
             name=model_name,
             #source_files=["*.py", "requirements.txt"],
             capture_stdout=True,
@@ -148,48 +149,16 @@ class SupervisedBaselines():
         self.neptune_callback = npt_utils.NeptuneCallback(self.neptune_logger) 
         
     def neptune_add_token(self, neptune_api_token: str):
-        self.__neptune_api_token = neptune_api_token
+        self._neptune_api_token = neptune_api_token
     
     def neptune_del_token(self):
-        del self.__neptune_api_token
+        self._neptune_api_token = None
     
     def neptune_log_metadata(self, model_name: str):
         for k, v in self.global_tuning_params.items():
             self.neptune_logger[k] = v
         for k, v in self.model_hyperparams[model_name].items():
             self.neptune_logger[k] = v
-            
-    def fit(self):
-        for mt in self.model_types:
-            if self.__neptune_api_token is not None:
-                self.neptune_initialize_run(model_name=mt)
-                self.neptune_log_metadata(model_name=mt)
-            
-            if self.global_tuning_params is not None:
-                # Perform optuna hyperparameter tuning
-                self.optuna[mt], self.model[mt] = run_optuna.optimize_hyperparams(
-                    # Input Data
-                    self.X, self.y,
-                    # KFold Grouping
-                    split_groups = split_groups,
-                    # Sampling, Train/Eval Specifications
-                    hyperparam_config = self.model_hyperparams[mt],
-                    define_model_fxn = define_models.define_models,
-                    define_model_params = {"model_name": mt},
-                    train_model_fxn = lambda model, X, y: model.fit(X,y), 
-                    evaluate_model_fxn = lambda model, X, y: model.score(X,y),
-                    # Neptune Logger
-                    neptune_callback = [self.neptune_callback],
-                    # Trial and Fold Specifications: 
-                        # n_trials, n_splits, train_size, 
-                        # eval_params, optimization_direction
-                    **self.global_tuning_params
-                )
-                self.optuna_best_performance[mt] = self.optuna[mt].best_value
-            if self.__neptune_api_token is not None:
-                self.neptune_logger.stop()
-                self.neptune_callback = None
-        self.neptune_del_token()
         
 if __name__ == '__main__':
     # Run typical usage example

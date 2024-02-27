@@ -3,10 +3,12 @@ from supervised_baselines import baselines
 
 # Initialize regressor and classifier classes
 os.system("source ~/neptune_api_token.sh")
-params = {
-    model_type = "all_regressors",
-    neptune_project_name ="supervised-baselines-example", 
-    neptune_workspace="drjudydu"
+neptune_api_token = os.environ["NEPTUNE_API_TOKEN"]
+
+params = {"model_type": "all_regressors",
+    "neptune_project_name": "ai4all-genomics-demo", 
+    "neptune_workspace": "drjudydu",
+    "neptune_api_token": neptune_api_token
 }
 reg = baselines.SupervisedBaselines(**params)
 params["model_type"] = "all_classifiers"
@@ -34,15 +36,15 @@ def test_configure_optuna_hyperparams(classifiers=clf):
 
 # Test Neptune
 def test_configure_neptuneai(classifiers=clf):
-    assert len(classifiers.__neptune_api_token) > 0
+    assert len(classifiers._neptune_api_token) > 0
     
 def test_neptune_del_token(classifiers=clf):
     classifiers.neptune_del_token()
-    assert len(classifiers.__neptune_api_token) == 0
+    assert not classifiers._neptune_api_token
     
-def test_neptune_add_token(classifiers=clf):
-    classifiers.neptune_add_token(os.environ["NEPTUNE_API_TOKEN"])
-    assert len(classifiers.__neptune_api_token) > 0
+def test_neptune_add_token(classifiers=clf, token=neptune_api_token):
+    classifiers.neptune_add_token(token)
+    assert classifiers._neptune_api_token
     
 def test_neptune_initialize_run(classifiers=clf):
     classifiers.neptune_initialize_run("test_baselines")
@@ -53,4 +55,4 @@ def test_neptune_initialize_run(classifiers=clf):
 # Test Eval
 
 # Break down test objects
-del params, reg, clf
+del neptune_api_token, params, reg, clf
